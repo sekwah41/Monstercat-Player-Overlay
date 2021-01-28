@@ -7,6 +7,8 @@
 // @match        https://www.monstercat.com/player*
 // @grant        none
 // @require      http://code.jquery.com/jquery-latest.js
+// @updateURL    https://github.com/sekwah41/Monstercat-Player-Overlay/raw/main/monstercat-player-overlay.user.js
+// @downloadURL  https://github.com/sekwah41/Monstercat-Player-Overlay/raw/main/monstercat-player-overlay.user.js
 // ==/UserScript==
 /* globals $ */
 
