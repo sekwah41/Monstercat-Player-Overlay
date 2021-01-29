@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Monstercat Player
 // @namespace    https://www.monstercat.com/
-// @version      0.1
+// @version      1.0
 // @description  Events and code to hook into the Monstercat Player
 // @author       Sekwah
 // @match        https://www.monstercat.com/player*
@@ -22,6 +22,8 @@
 
     let enabled = false;
 
+    let failedSending = false;
+
     let currentPlayingStatus = {
         playing: false,
         song: {
@@ -41,17 +43,16 @@
 
         // This is to force webpack into running our code and make other modules available to us
         window.webpackJsonp_N_E.push([[69], {
-            "oVeR": (function(module, exports, __webpack_require__) {
+            "oVeR": (function (module, exports, __webpack_require__) {
 
                 try {
                     toast = __webpack_require__("hUol");
 
-                    toast.info("Injection has been successful :)", "Stream Overlay");
+                    toast.success("Injection has been successful :)", "Stream Overlay");
 
                     clearInterval(loopCheckRef);
                     setupAddon();
-                }
-                catch(e) {
+                } catch (e) {
                     console.log("Issue trying to initialise, retrying soon.")
                 }
             })
@@ -59,27 +60,35 @@
     }
 
     function setupAddon() {
-        if(enabled) return;
+        if (enabled) return;
         enabled = true;
 
         setInterval(checkCurrentPlayingStatus, 100);
     }
 
+    function failedRequest() {
+        if (!failedSending) {
+            toast.error("Error communicating with overlay", "Stream Overlay");
+            failedSending = true;
+        }
+    }
+
     function checkCurrentPlayingStatus() {
         let playButton = $('.btn.play-pause').find('i');
         let isPlaying = playButton.hasClass("fa-pause") || playButton.hasClass("fa-spin");
-        let songName = $('.song-info').find('.song-title').text();
-        let artists = $('.song-info').find('.artists-list').find('a').toArray().map(a => $(a).text());
-        let albumArt = $('.active-song').find('.album-art').css('background-image').replace('url("','').replace('")','');
+        let songInfo = $('.song-info');
+        let songName = songInfo.find('.song-title').text();
+        let artists = songInfo.find('.artists-list').find('a').toArray().map(a => $(a).text());
+        let albumArt = $('.active-song').find('.album-art').css('background-image').replace('url("', '').replace('")', '');
 
         let timeStamp = $('.active-song-time').text().split('/').map(a => a.trim().split(':'));
 
-        if(timeStamp[1][0] !== "NaN") {
+        if (timeStamp[1][0] !== "NaN") {
             let progress = {
                 time: (parseInt(timeStamp[0][0]) * 60 + parseInt(timeStamp[0][1])),
                 total: (parseInt(timeStamp[1][0]) * 60 + parseInt(timeStamp[1][1]))
             }
-            if(progress.time !== currentProgress.time || progress.total !== currentProgress.total) {
+            if (progress.time !== currentProgress.time || progress.total !== currentProgress.total) {
                 updateProgress(progress);
             }
         }
@@ -93,7 +102,7 @@
             }
         };
 
-        if(albumArt !== "none" && JSON.stringify(newPlayingStatus) !== JSON.stringify(currentPlayingStatus)) {
+        if (albumArt !== "none" && JSON.stringify(newPlayingStatus) !== JSON.stringify(currentPlayingStatus)) {
             songChange(newPlayingStatus);
         }
 
@@ -103,16 +112,19 @@
 
         currentProgress = progress;
 
-        $.ajax({type: "POST",
-            url: "http://localhost:8080/song/progress",
-            dataType: 'json',
-            contentType: "application/json",
-            async: false,
-            data: JSON.stringify( {
-                time: progress.time * 1000,
-                total: progress.total * 1000,
-            })
-        });
+        if (!failedSending) {
+            $.ajax({
+                type: "POST",
+                url: "http://localhost:8080/song/progress",
+                dataType: 'text',
+                contentType: "application/json",
+                async: true,
+                data: JSON.stringify({
+                    time: progress.time * 1000,
+                    total: progress.total * 1000,
+                })
+            }).fail(failedRequest);
+        }
     }
 
     /**
@@ -122,29 +134,37 @@
     function songChange(playingStatus) {
         currentPlayingStatus = playingStatus;
 
-        $.ajax({type: "POST",
+        $.ajax({
+            type: "POST",
             url: "http://localhost:8080/song/change",
-            dataType: 'json',
+            dataType: 'text',
             contentType: "application/json",
-            async: false,
-            data: JSON.stringify( {
-                    playing: playingStatus.playing,
-                    name: playingStatus.song.name,
-                    img: playingStatus.song.art,
-                    artist: playingStatus.song.artists.join(", "),
-                    platform: "Monstercat",
-                })
-        });
+            async: true,
+            data: JSON.stringify({
+                playing: playingStatus.playing,
+                name: playingStatus.song.name,
+                img: playingStatus.song.art,
+                artist: playingStatus.song.artists.join(", "),
+                platform: "Monstercat",
+            })
+        }).done(() => {
+            if (failedSending) {
+                toast.success("Reconnected to overlay", "Stream Overlay");
+                failedSending = false;
+            }
+        }).fail(failedRequest);
 
-        toast.info(`New song detected</br>
+        if (!failedSending) {
+            toast.info(`New song detected</br>
                     Song: ${playingStatus.song.name}</br>
                     Artist: ${playingStatus.song.artists.join(", ")}`, "Song change");
+        }
 
     }
 
     let loopCheckRef;
     let loopCheck = () => {
-        if(window.webpackJsonp_N_E) {
+        if (window.webpackJsonp_N_E) {
             injectIntoWebpack();
         }
     }
