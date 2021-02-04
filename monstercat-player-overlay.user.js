@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Monstercat Player
 // @namespace    https://www.monstercat.com/
-// @version      1.0
+// @version      1.1
 // @description  Events and code to hook into the Monstercat Player
 // @author       Sekwah
 // @match        https://www.monstercat.com/player*
@@ -39,6 +39,10 @@
         total: 0,
     };
 
+    function getPlayProps() {
+
+    }
+
     function injectIntoWebpack() {
 
         // This is to force webpack into running our code and make other modules available to us
@@ -57,6 +61,36 @@
                 }
             })
         }, [['oVeR']]]);
+    }
+
+    function getSongInfo() {
+        let playReactComponent = null;
+
+        let possiblePlayBars = $('.buttons').toArray();
+        for(let i of possiblePlayBars) {
+            let playBar = i;
+            let reactInternal = playBar[Object.keys((playBar)).find((detail) => {
+                return detail.startsWith("__reactInternalInstance");
+            })];
+
+            playReactComponent = reactInternal.memoizedProps.children.find(child => {
+                return child?.props?.className === "play-pause";
+            });
+        }
+
+        let extraDetails = {
+            link: null,
+        };
+
+        if(playReactComponent) {
+            let songData = playReactComponent?.props?.song;
+            let catalogueId = songData?.release?.catalogId;
+            if(catalogueId) {
+                extraDetails.link = `https://www.monstercat.com/release/${catalogueId}`;
+            }
+        }
+
+        return extraDetails;
     }
 
     function setupAddon() {
@@ -93,12 +127,14 @@
             }
         }
 
+        let {link} = getSongInfo();
         let newPlayingStatus = {
             playing: isPlaying,
             song: {
                 name: songName,
                 artists: artists,
                 art: albumArt,
+                link
             }
         };
 
@@ -144,6 +180,7 @@
                 playing: playingStatus.playing,
                 name: playingStatus.song.name,
                 img: playingStatus.song.art,
+                link: playingStatus.song.link,
                 artist: playingStatus.song.artists.join(", "),
                 platform: "Monstercat",
             })
